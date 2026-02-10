@@ -36,9 +36,34 @@ def filter_records(
     market_slug: str | None = None,
 ) -> list[dict]:
     filtered: list[dict] = []
+    execution_events = {
+        "place_received",
+        "report_submitted",
+        "report_accepted",
+        "report_rejected",
+        "report_fill",
+        "report_final",
+        "cancel_requested",
+        "report_canceled",
+        "report_cancel_rejected",
+        "report_cancel_failed",
+        "fill_applied",
+    }
     for record in records:
-        if record.get("strategy") != strategy:
-            continue
+        if strategy == "portfolio":
+            event = record.get("event")
+            strategy_value = record.get("strategy")
+            if strategy_value is not None and strategy_value != "portfolio":
+                continue
+            if event is not None and event not in {"snapshot", "settled"}:
+                continue
+        elif strategy == "execution":
+            event = record.get("event")
+            if event is None or event not in execution_events:
+                continue
+        else:
+            if record.get("strategy") != strategy:
+                continue
         if market_slug:
             slug = record.get("market_slug")
             if slug is None:

@@ -31,12 +31,27 @@ def normalize_records(records: list[dict]) -> pd.DataFrame:
     df = pd.json_normalize(records, sep=".")
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-    elif "ts_ms" in df.columns:
-        df["timestamp"] = _safe_ms_to_datetime(df["ts_ms"])
-    elif "event_ts_ms.log" in df.columns:
-        df["timestamp"] = _safe_ms_to_datetime(df["event_ts_ms.log"])
     else:
-        raise ValueError("Missing 'timestamp' or 'ts_ms' field after normalization")
+        candidates = []
+        if "ts_ms" in df.columns:
+            candidates.append("ts_ms")
+        if "event_ts_ms.log" in df.columns:
+            candidates.append("event_ts_ms.log")
+        if "engine_ts_ms" in df.columns:
+            candidates.append("engine_ts_ms")
+        if "event_ts_ms.book" in df.columns:
+            candidates.append("event_ts_ms.book")
+
+        chosen = None
+        for col in candidates:
+            series = _safe_ms_to_datetime(df[col])
+            if series.notna().any():
+                df["timestamp"] = series
+                chosen = col
+                break
+
+        if chosen is None:
+            raise ValueError("Missing usable timestamp (ts_ms/event_ts_ms.log/engine_ts_ms)")
     if "__line__" in df.columns:
         missing_ts = df["timestamp"].isna()
         if missing_ts.any():

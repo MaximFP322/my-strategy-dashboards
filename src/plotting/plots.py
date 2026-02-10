@@ -205,6 +205,188 @@ SPIKE_LAG_PLOTS: tuple[PlotSpec, ...] = (
     ),
 )
 
+SPIKE_LAG_UPD_PLOTS: tuple[PlotSpec, ...] = (
+    PlotSpec(
+        name="spike_upd_btc_price",
+        columns=("btc_price", "price_to_beat", "coinbase_price"),
+        title="BTC price vs strike",
+        ylabel="price",
+        time_source="btc",
+    ),
+    PlotSpec(
+        name="spike_upd_btc_delta",
+        columns=("btc_delta", "coinbase_delta", "delta"),
+        title="BTC delta vs strike",
+        ylabel="delta",
+        time_source="btc",
+    ),
+    PlotSpec(
+        name="spike_upd_react_lag",
+        columns=(
+            "p_react_up",
+            "dp_react",
+            "lag_react_up",
+            "lag_react_down",
+            "lag_level_up",
+            "lag_level_down",
+            "cross_k",
+            "near_k",
+            "z_spike",
+        ),
+        title="Reaction / lag signals",
+        time_source="event",
+    ),
+    PlotSpec(
+        name="spike_upd_velocity",
+        columns=("v_prev", "v", "tau_react_s", "scale", "d_s", "sign_prev", "sign_now"),
+        title="Velocity / scaling",
+        time_source="event",
+    ),
+    PlotSpec(
+        name="spike_upd_book_up",
+        columns=("up_bid", "up_ask", "micro_up"),
+        title="Up book (best bid/ask)",
+        ylabel="price",
+        price_axis_01=True,
+        time_source="up_book",
+    ),
+    PlotSpec(
+        name="spike_upd_book_down",
+        columns=("down_bid", "down_ask", "micro_down"),
+        title="Down book (best bid/ask)",
+        ylabel="price",
+        price_axis_01=True,
+        time_source="down_book",
+    ),
+    PlotSpec(
+        name="spike_upd_spreads",
+        columns=("spread_up_ticks", "spread_down_ticks", "spread_max_ticks"),
+        title="Spread (ticks)",
+        time_source="book",
+    ),
+    PlotSpec(
+        name="spike_upd_filters",
+        columns=(
+            "min_top_qty",
+            "edge_guard",
+            "micro_lookback_ms",
+            "taker_lag_threshold",
+            "entry_lag_threshold",
+            "stale_penalty",
+            "lag_ok",
+            "top_ok_up",
+            "top_ok_down",
+            "in_edge",
+            "in_cooldown",
+            "pending_canceled",
+        ),
+        title="Filters / gates",
+        time_source="event",
+    ),
+    PlotSpec(
+        name="spike_upd_position",
+        columns=(
+            "position.up_tokens",
+            "position.down_tokens",
+            "position.usdc_balance",
+            "available_cash",
+            "available_up_tokens",
+            "available_down_tokens",
+        ),
+        title="Position / available",
+        time_source="default",
+    ),
+)
+
+PORTFOLIO_PLOTS: tuple[PlotSpec, ...] = (
+    PlotSpec(
+        name="portfolio_value",
+        columns=("portfolio_mtm", "cash", "remaining_budget"),
+        title="Portfolio value / cash",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="portfolio_positions",
+        columns=("up_tokens", "down_tokens"),
+        title="Token positions",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="portfolio_available",
+        columns=(
+            "available_cash",
+            "available_up_tokens",
+            "available_down_tokens",
+            "reserved_cash",
+            "reserved_up_tokens",
+            "reserved_down_tokens",
+        ),
+        title="Available / reserved",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="portfolio_open_orders",
+        columns=("open_orders",),
+        title="Open orders count",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="portfolio_fills",
+        columns=("filled_amount", "avg_price"),
+        title="Filled amount / avg price",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="portfolio_bids",
+        columns=("up_bid", "down_bid"),
+        title="Best bids (snapshot time)",
+        ylabel="price",
+        price_axis_01=True,
+        time_source="default",
+    ),
+    PlotSpec(
+        name="portfolio_settlement",
+        columns=("price_to_beat", "end_price", "pnl"),
+        title="Settlement summary",
+        time_source="default",
+    ),
+)
+
+EXECUTION_PLOTS: tuple[PlotSpec, ...] = (
+    PlotSpec(
+        name="execution_prices",
+        columns=(
+            "request.limit_price",
+            "request.amount",
+            "report.avg_price",
+            "report.filled_amount",
+        ),
+        title="Order prices / filled amount",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="execution_status",
+        columns=(
+            "report.filled_amount",
+            "report.avg_price",
+        ),
+        title="Execution report metrics",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="execution_balances",
+        columns=("report.cash", "report.up_tokens", "report.down_tokens"),
+        title="Post-fill balances (engine)",
+        time_source="default",
+    ),
+    PlotSpec(
+        name="execution_notional",
+        columns=("report.notional",),
+        title="Notional per fill",
+        time_source="default",
+    ),
+)
+
 CATEGORY_PLOTS: tuple[tuple[str, str], ...] = (
     ("decision", "Decision timeline"),
     ("exposure", "Exposure timeline"),
@@ -364,6 +546,17 @@ def _select_time_series(df: pd.DataFrame, source: str) -> pd.Series:
         )
         if down_ms is not None:
             return _ms_to_datetime(down_ms)
+        return _select_time_series(df, "default")
+
+    if source == "engine":
+        engine_ms = _ms_series(
+            df,
+            (
+                "engine_ts_ms",
+            ),
+        )
+        if engine_ms is not None:
+            return _ms_to_datetime(engine_ms)
         return _select_time_series(df, "default")
 
     if source in {"book", "event"}:
@@ -910,6 +1103,51 @@ def generate_plots(
         )
 
     for spec in SPIKE_LAG_PLOTS:
+        created.extend(
+            _plot_numeric(
+                df,
+                spec,
+                out_dir,
+                formats,
+                figscale,
+                xscale,
+                yscale,
+                dpi,
+                base_time,
+            )
+        )
+
+    for spec in SPIKE_LAG_UPD_PLOTS:
+        created.extend(
+            _plot_numeric(
+                df,
+                spec,
+                out_dir,
+                formats,
+                figscale,
+                xscale,
+                yscale,
+                dpi,
+                base_time,
+            )
+        )
+
+    for spec in PORTFOLIO_PLOTS:
+        created.extend(
+            _plot_numeric(
+                df,
+                spec,
+                out_dir,
+                formats,
+                figscale,
+                xscale,
+                yscale,
+                dpi,
+                base_time,
+            )
+        )
+
+    for spec in EXECUTION_PLOTS:
         created.extend(
             _plot_numeric(
                 df,
